@@ -1,0 +1,129 @@
+(*Signature for the structure*)
+signature SHORTESTPATH = 
+sig
+	datatype setI = inf | SOME of int;
+	exception NegativeWeight
+	exception NoNode
+	val checkNegativeWeight : ('a * int * 'b)list ->'c list
+	val getNodes : ('a* 'b * 'a)list ->'a list
+	val checkPresence : ''a list * ''a -> int
+	val findUnique : ''a list * ''a list ->''a list
+	val Nodes : ''a list * ''a -> (''a * setI * int * int)list
+	val getReqNode : (''a * setI * 'b * 'c)list * ''a ->(''a * setI * 'b * 'c )list
+	val updateNode : (''a * setI * 'b * 'c )list * ''a * setI * 'b -> (''a * setI * 'b * 'c )list
+	val findDist : (''a * setI * ''b * 'c)list * (''b * int * ''a)list * (''b * setI * 'd * 'e) -> (''a * setI * ''b * 'c)list 
+	val getMin : ('a * setI * 'b * int) list * ('a * setI) -> 'a * setI
+	val setVisited : (''a * 'b * 'c * int)list * ''a -> (''a * 'b * 'c * int) list
+	val Dijkstra : (int * int * int ) list * int * int -> int list
+	val findPath : (int * int * int)list * (int * setI * int * int)list * 'a * (int * setI * 'b * 'c ) * (int * setI * int * int) -> int list
+	val PrintPath : (int * setI * int * 'a) list * int * (int * setI * int * 'a)list * int list ->int list
+	val compare : setI * setI -> bool
+	val addDist : setI * setI -> int
+	val checkEqual : setI * setI -> bool
+
+end
+
+(*Body of the structure*)
+
+structure ShortestPath : SHORTESTPATH =
+struct
+
+	datatype setI = inf | SOME of int;	(*Datatype*)
+
+	exception NegativeWeight		(*Identify the negative weights on the edges*)
+	exception NoNode			(*Identify that there is no path from src to dest*)
+
+	fun compare (SOME a,inf) = false	(*case : a > inf *)
+	|   compare (inf,SOME b) = true		(*case : b < inf *)
+	|   compare (inf,inf) = false		(*case : inf > inf *)
+	|   compare (SOME a ,SOME b)   = if a>b then true  (*case : a > b *)
+			  	         else false;
+	
+	fun addDist (SOME a,inf) = a		(*case : a + inf  gives a*)
+	|   addDist (inf,SOME b) = b		(*case : inf + b  gives b*)
+	|   addDist (inf,inf) = 0		(*case : inf + inf  gives inf*)
+	|   addDist (SOME a ,SOME b)   = a+b;	(*case : a + b . Standard addition*)
+
+	fun checkEqual (SOME a,inf) = false
+	|   checkEqual (inf,SOME b) = false
+	|   checkEqual (inf,inf)    = false
+	|   checkEqual (SOME a,SOME b) = if a = b then true
+					 else false;
+	
+	fun checkNegativeWeight [] = []		(*Reached the end of the list*)
+	|   checkNegativeWeight ((g1,g2,g3)::gs) = if g2 < 0 then raise NegativeWeight  (*Found a negative weight and hence throw an exception*)
+			      			        else checkNegativeWeight(gs);	(*Current weight is nonnegative and so continue*)
+	fun getNodes [] = []			(*Reached the end of the list*)
+	|   getNodes ((g1,g2,g3)::gs) = g1::g3 :: getNodes(gs);  (*Nodes are contained in the first and third value in the tuple. Extracting the nodes*)
+	
+	fun checkPresence ([],x) = 0		(*Reached the end of the list*)
+	|   checkPresence (g::gs,x) = if g = x then 1    (*Node already present in the list - Duplicate node*)
+				      else checkPresence(gs,x); (*Continue seaching for duplicate*)
+
+	fun findUnique ([],_) = []		(*Reached the end of the list*)
+	|   findUnique (g::gs,xs) = if checkPresence(gs,g) = 1 then findUnique(tl xs,tl xs)  (*Node is duplicate. So skipped from contention*)
+				    else g::findUnique(tl xs,tl xs);	(*Node is unique. So added to the list*)
+
+	fun Nodes ([],c) = []		(*Reached the end of the list*)
+	|   Nodes (g::gs,c) = if c = g then (g,SOME(0),0,1)::Nodes(gs,c)	(*For the start node. Sets the distance to 0 and visited to 1*)
+				else (g,inf,0,0)::Nodes(gs,c); 			(*For other nodes sets the distance to infinity and visited to 0*)
+
+	fun getReqNode ([],v) = []		(*Reached the end of the list*)
+	|   getReqNode ((g1,g2:setI,g3,g4)::gs,v) = if g1 = v then [(g1,g2,g3,g4)]	(*Returns the requested node*)
+					       else getReqNode (gs,v);		(*Current node is not the requested node. Hence continue searching*)
+
+	fun updateNode([],g,min,pred) = []	(*Reached the end of the list*)
+	|   updateNode((n1,n2:setI,n3,n4)::ns,g,min:setI,pred) = if n1 = g then (n1,min,pred,n4)::updateNode(ns,g,min,pred) (*Update the node with the new value of distance and the predecassor*)
+						       else (n1,n2,n3,n4)::updateNode(ns,g,min,pred);	(*Continue searching for the node to be updates*)
+	
+
+	fun findDist(ns,[],(c1,c2,c3,c4)) = ns		(*Reached the end of the list.Return the updated list of node information *)
+	|   findDist(ns,(g1,g2:int,g3)::gs,(c1,c2:setI,c3,c4)) = if c1 = g1 andalso compare((#2 (hd (getReqNode(ns,g3)))),SOME(addDist(c2,SOME(g2)))) then	(*Found a smaller path to the node *)
+								findDist(updateNode(ns,g3,SOME(addDist(c2,SOME(g2))),c1),gs,(c1,c2,c3,c4))			(*Update the node with the new smaller distance value and the predecassor*)
+							else findDist(ns,gs,(c1,c2,c3,c4));				(*Continue checking for the next node in the list*)
+
+	fun getMin ([],(g,min))=(g,min)			(*Reached the end of the list. Hence return the next node with min weight in the node information list and return the min distance*)
+	|   getMin ((g1,g2:setI,g3,g4)::gs,(g,min:setI))=if compare(min,g2) andalso g4 = 0 then getMin (gs,(g1,g2))	(*Compare the current minimum distance with the weight of the node in the list which is not already visited. If found, the new min node is used*)
+					     else getMin (gs,(g,min));		(*If not then continue searching for a node with minimum weight *)
+
+	fun setVisited ([],v) = []		(*Reached the end of the list*)
+	|   setVisited ((n1,n2,n3,n4)::ns,v) = if n1 = v then (n1,n2,n3,1)::setVisited(ns,v)	(*set the current node to visited*)
+					       else (n1,n2,n3,n4)::setVisited(ns,v);		(*Current node is not the desired node*)
+
+	fun PrintPath (ns,0,ns2,N) = N		(*Reached the source node. return the path list*)
+	|   PrintPath (ns,cn,ns2,N) = 		
+	let val (c1,c2,c3,c4) = hd (getReqNode(ns,cn))	(*find the predecassor of the current node*)
+	in
+	    PrintPath(ns2,c3,ns2,[c1]@N)		(*Append the current node to the path and continue till we reach the start node*)
+	end
+
+	fun findPath (g,ns,s,(e1,e2:setI,e3,e4),(c1,c2:setI,c3,c4)) =	
+	let val ns = findDist(ns,g,(c1,c2,c3,c4))	(*Find the distance from the current node with all the nodes that are connected to it*)
+	    val ns = setVisited(ns,c1) 			(*Set Visited for the current node to 1*)
+	    val nxt = getMin(ns,(~1,inf))		(*Get the node with min value from the list of unvisited node*)
+	    val nxtnnd = getReqNode (ns,#1 nxt)		(*Get details of the next node from the node information list*)
+	in
+	    if e1 = c1 then
+		PrintPath(ns,e1,ns,[])			(*Reached the end node. Print the path*)
+	    else
+		if nxtnnd = [] then raise NoNode	(*No next node found. raise a no path exceptions*)
+		else findPath(g,ns,s,(e1,e2,e3,e4),hd nxtnnd)	(*Continue with the next node*)
+	end
+	handle NoNode => (print "No path from source to destination ";[0])
+
+	fun Dijkstra (g,s,e) = 
+	let val t = checkNegativeWeight(g)		(*Check for negative weights*)
+	    val nt1 = getNodes(g)			(*Extract all the nodes from the edge list*)
+	    val nt2 = findUnique(nt1,nt1)		(*Find all the unique nodes*)
+	    val n   = Nodes(nt2,s)			(*Generate the node information list nodeid,weight,predecassor,visited *)
+	    val en  = getReqNode(n,e)			(*Extract the end node from the node information list*)
+	    val sn  = getReqNode(n,s)			(*Extract the start node from the node information list*)
+
+	in
+	    findPath(g,n,s,hd en,hd sn)			(*Find path from start node to end node*)
+	    
+	end
+	handle NegativeWeight => (print "Negative Weights are not allowed ";[0])
+	
+
+end
